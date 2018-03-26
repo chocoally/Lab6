@@ -88,6 +88,7 @@ For this exercise, we will be analyzing the a single cell RNA-Seq dataset of Per
 
 **First, load the packages and the data object**
 ```{r init, cache=FALSE, message=FALSE,eval=FALSE}
+setwd("~/Dropbox (Partners HealthCare)/HSPH/BST282/Lab6")
 library(Seurat)
 library(Matrix)
 library(dplyr)
@@ -116,7 +117,8 @@ VlnPlot(pbmc, c("percent.mito"), nCol = 1)
 VlnPlot(pbmc, c("nGene", "nUMI", "percent.mito"), nCol = 3)
 
 pbmc <- SubsetData(pbmc, subset.name = "nGene", accept.high = 2500)
-pbmc <- SubsetData(pbmc, subset.name = "percent.mito", accept.high = 0.05)
+pbmc <- SubsetData(pbmc, subset.name = "percent.mito", accept.high = 0.05) # only want ones < 5%
+dim(pbmc@data)
 ```
 
 ## Normalization
@@ -128,7 +130,7 @@ pbmc <- NormalizeData(object = pbmc, normalization.method = "LogNormalize", scal
 ## Linear/Non-linear dimensional reduction
 Rather than focusing on specific differentially expressed genes, a staple in scRNA-Seq analyses involves dimension reduction. Let's start by investigating the mean-variance relationship and discarding outliers. Then we can scale the data and regress out the confounders we looked at earlier. Finally, we'll run PCA. 
 ```{r meanVar, message = FALSE, warning = FALSE, fig.keep= FALSE,eval=FALSE}
-pbmc <- FindVariableGenes(pbmc,mean.function=ExpMean,dispersion.function = LogVMR, x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5, do.contour = FALSE)
+pbmc <- FindVariableGenes(pbmc,mean.function=ExpMean,dispersion.function = LogVMR, x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5, do.contour = FALSE) # x cutoff to remove highly and lowly expressed genes; y cutoff to remove genes with low variability
 length(x = pbmc@var.genes)
 pbmc <- ScaleData(pbmc,vars.to.regress = c('nUMI','percent.mito'))
 pbmc <- RunPCA(pbmc, pc.genes = pbmc@var.genes, do.print = FALSE, pcs.print = 5, genes.print = 5)
@@ -161,6 +163,8 @@ Use the FindClusters command to determine sample modules in the PBMC data. Comme
 ```{r cluster,fig.height=5,fig.width=7,cache=TRUE,eval=FALSE}
 pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
     resolution = 0.6, print.output = 0, save.SNN = TRUE)
+
+PrintFindClustersParams(object=pbmc)
 ```
 Details are in the Seurat source code as well as several paragraphs in the vignette. It is supervised. 
 
@@ -168,6 +172,7 @@ Details are in the Seurat source code as well as several paragraphs in the vigne
 A popular method for displaying scRNA-Seq data is by creating two dimensions using tSNE. Run and visualize tSNE for this data. Comment on how this approach is different than PCA.
 
 ```{r tsne, fig.height=5, fig.width=7, cache=TRUE, message=FALSE, warnings=FALSE,eval=FALSE}
+set.seed(123) # tSNE is stochastic
 pbmc <- RunTSNE(pbmc, dims.use = 1:10, do.fast = TRUE)
 ```
 
@@ -182,14 +187,15 @@ Now that we've defined data-driven clusters, we'd like to identify markers that 
 
 ```{r markers1,fig.height=8,fig.width=15,cache=TRUE, warning=FALSE,eval=FALSE}
 # find all markers of cluster 2
-cluster2.markers <- FindMarkers(pbmc, ident.1 = 2, min.pct = 0.25)
-print(head(cluster2.markers, 5))
+cluster2.markers <- FindMarkers(pbmc, ident.1 = 2, min.pct = 0.25) # look at differential genes in cluster 2
+print(head(cluster2.markers, 5)) # just pick one that separates cluster 2
 
-cluster24.markers <- FindMarkers(pbmc, 2, 4, min.pct = 0.25)
-print(head(cluster24.markers, 5))
+cluster24.markers <- FindMarkers(pbmc, ident.1=2, ident.2=4, min.pct = 0.25) # look at differentially expressed genes between cluster 2 and 4
+print(head(cluster24.markers, n=5))
 
-pbmc.markers <- FindAllMarkers(pbmc, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
-pbmc.markers %>% group_by(cluster) %>% top_n(2, avg_diff)
+pbmc.markers <- FindAllMarkers(pbmc, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25) # look at differential genes comparing each to all clusters
+pbmc.markers %>% group_by(cluster) %>% top_n(2, avg_logFC)
+
 ```
 
 ## Differentially expressed genes (cluster biomarkers)
@@ -228,8 +234,8 @@ Using the inference above, annotate your tSNE with the cell type names.
 ```{r labelplot,fig.height=5,fig.width=9,cache=FALSE, warning = FALSE,eval=FALSE}
 current.cluster.ids <- c(0, 1, 2, 3, 4, 5, 6, 7)
 new.cluster.ids <- c("CD4 T cells", "CD14+ Monocytes", "B cells",
-                     "CD8 T cells", "CD4 T cells", "FCGR3A+ Monocytes", "NK cells",
-                     "Dendritic cells")
+                     "CD8 T cells", "FCGR3A+ Monocytes", "NK cells",
+                     "Dendritic cells", "Megakaryocytes")
 pbmc@ident <- plyr::mapvalues(pbmc@ident, from = current.cluster.ids, to = new.cluster.ids)
 TSNEPlot(pbmc, do.label = TRUE, pt.size = 0.5)
 ```
